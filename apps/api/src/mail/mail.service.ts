@@ -27,6 +27,7 @@ export class MailService {
     this.transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
+      family: 4,
       secure: true,
       auth: {
         user: process.env.MAIL_USER,
@@ -214,5 +215,6 @@ export class MailService {
     }
   }
 }
+
 
 
