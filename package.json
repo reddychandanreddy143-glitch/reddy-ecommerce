@@ -1,0 +1,20 @@
+{
+  "name": "reddy-ecommerce-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "REDDY E-COMMERCE - Full-Stack Marketplace Platform",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "build:common": "npm run build --workspace=@reddy/common",
+    "dev:api": "npm run start:dev --workspace=@reddy/api",
+    "dev:web": "npm run dev --workspace=@reddy/web"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

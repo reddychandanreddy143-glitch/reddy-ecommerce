@@ -1,0 +1,17 @@
+import { IsEmail, IsNotEmpty, IsString, Length, MinLength } from 'class-validator';
+
+export class ResetPasswordDto {
+  @IsEmail({}, { message: 'Please provide a valid email address' })
+  @IsNotEmpty({ message: 'Email is required' })
+  email: string;
+
+  @IsString()
+  @Length(6, 6, { message: 'OTP must be exactly 6 digits' })
+  @IsNotEmpty({ message: 'OTP is required' })
+  otp: string;
+
+  @IsString()
+  @MinLength(6, { message: 'Password must be at least 6 characters long' })
+  @IsNotEmpty({ message: 'New password is required' })
+  newPassword: string;
+}
