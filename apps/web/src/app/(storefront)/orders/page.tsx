@@ -9,7 +9,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { InvoiceModal } from '@/components/orders/InvoiceModal';
 import {
   Package,
-  Clock,
+  Timer,
   CheckCircle2,
   Truck,
   XCircle,

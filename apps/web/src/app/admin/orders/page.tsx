@@ -10,7 +10,7 @@ import {
   Truck,
   CheckCircle,
   XCircle,
-  Clock,
+  Timer,
   Search,
   Filter,
   RefreshCw,
