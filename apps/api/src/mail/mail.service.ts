@@ -1,7 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as nodemailer from 'nodemailer';
-import * as dns from 'dns';
-dns.setDefaultResultOrder('ipv4first');
+import { Resend } from 'resend';
 
 export interface OrderEmailDetails {
   to: string;
@@ -23,27 +21,19 @@ export interface OrderCancelledEmailDetails {
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
-  private transporter: nodemailer.Transporter;
+  private resend: Resend;
+  private fromEmail = 'onboarding@resend.dev';
 
   constructor() {
-    this.transporter = nodemailer.createTransport(<any>{
-      host: '74.125.130.108',
-      tls: { servername: 'smtp.gmail.com' },
-      port: 465,
-      family: 4,
-      secure: true,
-      auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
-      },
-    });
+    const apiKey = process.env.RESEND_API_KEY;
+    this.resend = new Resend(apiKey);
   }
 
   async sendOtpEmail(to: string, otp: string): Promise<boolean> {
     try {
-      await this.transporter.sendMail({
-        from: process.env.MAIL_FROM || process.env.MAIL_USER,
-        to,
+      const response = await this.resend.emails.send({
+        from: `Reddy Store <${this.fromEmail}>`,
+        to: [to],
         subject: 'Your Verification Code - Reddy Store',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
@@ -56,7 +46,13 @@ export class MailService {
           </div>
         `,
       });
-      this.logger.log(`OTP successfully sent to ${to}`);
+
+      if (response.error) {
+        this.logger.error(`Failed to send OTP to ${to}: ${response.error.message}`);
+        return false;
+      }
+
+      this.logger.log(`OTP successfully sent to ${to} (id: ${response.data?.id})`);
       return true;
     } catch (error: any) {
       this.logger.error(`Failed to send OTP to ${to}: ${error?.message || error}`);
@@ -66,9 +62,9 @@ export class MailService {
 
   async sendPasswordResetOtpEmail(to: string, otp: string): Promise<boolean> {
     try {
-      await this.transporter.sendMail({
-        from: process.env.MAIL_FROM || process.env.MAIL_USER,
-        to,
+      const response = await this.resend.emails.send({
+        from: `Reddy Store <${this.fromEmail}>`,
+        to: [to],
         subject: 'Reset Your Password - Reddy Store',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
@@ -81,7 +77,13 @@ export class MailService {
           </div>
         `,
       });
-      this.logger.log(`Password reset OTP sent to ${to}`);
+
+      if (response.error) {
+        this.logger.error(`Failed to send reset OTP to ${to}: ${response.error.message}`);
+        return false;
+      }
+
+      this.logger.log(`Password reset OTP sent to ${to} (id: ${response.data?.id})`);
       return true;
     } catch (error: any) {
       this.logger.error(`Failed to send reset OTP to ${to}: ${error?.message || error}`);
@@ -97,22 +99,20 @@ export class MailService {
         maximumFractionDigits: 0,
       });
 
-      await this.transporter.sendMail({
-        from: process.env.MAIL_FROM || process.env.MAIL_USER,
-        to: details.to,
+      const response = await this.resend.emails.send({
+        from: `Reddy Store <${this.fromEmail}>`,
+        to: [details.to],
         subject: `Order Confirmed: ${details.productTitle} - Reddy Store`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
             <div style="text-align: center; padding-bottom: 16px; border-bottom: 1px solid #f1f5f9;">
               <h1 style="color: #2563eb; margin: 0; font-size: 24px;">Reddy Store</h1>
-              <p style="color: #16a34a; font-weight: bold; margin: 6px 0 0 0; font-size: 16px;">✓ Order Placed Successfully!</p>
+              <p style="color: #16a34a; font-weight: bold; margin: 6px 0 0 0; font-size: 16px;">? Order Placed Successfully!</p>
             </div>
-
             <p style="color: #334155; font-size: 14px; margin-top: 18px;">
               Hi <strong>${details.customerName}</strong>,<br>
               Thank you for shopping with us! Your booking is confirmed and is being prepared for dispatch.
             </p>
-
             <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
               <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
                 <tr>
@@ -133,25 +133,28 @@ export class MailService {
                 </tr>
               </table>
             </div>
-
             <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 12px; margin-bottom: 20px;">
               <span style="color: #b45309; font-size: 12px; font-weight: bold;">Delivery Location:</span>
               <p style="color: #78350f; font-size: 13px; margin: 4px 0 0 0;">${details.deliveryAddress}</p>
             </div>
-
             <div style="background-color: #ecfdf5; border: 1px solid #d1fae5; border-radius: 8px; padding: 12px; text-align: center;">
               <p style="color: #065f46; font-size: 12px; margin: 0; font-weight: 600;">
-                💵 Keep ${formattedPrice} ready in cash when your delivery partner arrives.
+                ?? Keep ${formattedPrice} ready in cash when your delivery partner arrives.
               </p>
             </div>
-
             <p style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 24px;">
               Need help? Reply directly to this email or visit Reddy Store Support.
             </p>
           </div>
         `,
       });
-      this.logger.log(`Order confirmation email sent to ${details.to}`);
+
+      if (response.error) {
+        this.logger.error(`Failed to send order email to ${details.to}: ${response.error.message}`);
+        return false;
+      }
+
+      this.logger.log(`Order confirmation email sent to ${details.to} (id: ${response.data?.id})`);
       return true;
     } catch (err: any) {
       this.logger.error(`Failed to send order email to ${details.to}: ${err?.message || err}`);
@@ -167,9 +170,9 @@ export class MailService {
         maximumFractionDigits: 0,
       });
 
-      await this.transporter.sendMail({
-        from: process.env.MAIL_FROM || process.env.MAIL_USER,
-        to: details.to,
+      const response = await this.resend.emails.send({
+        from: `Reddy Store <${this.fromEmail}>`,
+        to: [details.to],
         subject: `Order #${details.orderId.slice(0, 8).toUpperCase()} Cancelled - Reddy Store`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
@@ -177,12 +180,10 @@ export class MailService {
               <h1 style="color: #dc2626; margin: 0; font-size: 24px;">Reddy Store</h1>
               <p style="color: #dc2626; font-weight: bold; margin: 6px 0 0 0; font-size: 16px;">Order Cancelled</p>
             </div>
-
             <p style="color: #334155; font-size: 14px; margin-top: 18px;">
               Hi <strong>${details.customerName}</strong>,<br>
               Your order <strong>#${details.orderId.slice(0, 8).toUpperCase()}</strong> has been successfully cancelled as per your request.
             </p>
-
             <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
               <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
                 <tr>
@@ -199,18 +200,22 @@ export class MailService {
                 </tr>
               </table>
             </div>
-
             <p style="color: #64748b; font-size: 13px;">
               If this cancellation was accidental, you can browse our catalog and place a new order anytime.
             </p>
-
             <p style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 24px;">
               &copy; 2026 Reddy Store. All rights reserved.
             </p>
           </div>
         `,
       });
-      this.logger.log(`Order cancellation email sent to ${details.to}`);
+
+      if (response.error) {
+        this.logger.error(`Failed to send cancellation email to ${details.to}: ${response.error.message}`);
+        return false;
+      }
+
+      this.logger.log(`Order cancellation email sent to ${details.to} (id: ${response.data?.id})`);
       return true;
     } catch (err: any) {
       this.logger.error(`Failed to send cancellation email to ${details.to}: ${err?.message || err}`);
@@ -218,9 +223,4 @@ export class MailService {
     }
   }
 }
-
-
-
-
-
 
