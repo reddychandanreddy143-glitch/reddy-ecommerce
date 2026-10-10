@@ -24,7 +24,7 @@ export class MailService {
   private transporter: nodemailer.Transporter;
 
   constructor() {
-    this.transporter = nodemailer.createTransport({
+    this.transporter = nodemailer.createTransport(<any>{
       host: 'smtp.gmail.com',
       port: 465,
       family: 4,
@@ -215,6 +215,7 @@ export class MailService {
     }
   }
 }
+
 
 
 
