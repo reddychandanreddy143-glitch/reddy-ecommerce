@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
+import * as dns from 'dns';
+dns.setDefaultResultOrder('ipv4first');
 
 export interface OrderEmailDetails {
   to: string;
@@ -215,6 +217,7 @@ export class MailService {
     }
   }
 }
+
 
 
 
