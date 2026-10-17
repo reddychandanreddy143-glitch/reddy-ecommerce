@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
@@ -21,6 +21,7 @@ import {
   PlusCircle,
   CheckSquare,
   Square,
+  LogIn,
 } from 'lucide-react';
 
 interface SavedAddress {
@@ -50,14 +51,10 @@ export default function CartPage() {
   // Selected item IDs (Default: all items selected)
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
 
-  const userStorageKey = user?.id ? `reddy_saved_address_${user.id}` : user?.email ? `reddy_saved_address_${user.email}` : null;
+  const userStorageKey = user?.id ? 'reddy_saved_address_' + user.id : user?.email ? 'reddy_saved_address_' + user.email : null;
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/login');
-      return;
-    }
-    initUserCart(user?.id || user?.email);
+    initUserCart(user?.id || user?.email || null);
     fetchCart();
 
     if (typeof window !== 'undefined' && userStorageKey) {
@@ -76,7 +73,7 @@ export default function CartPage() {
         setUseNewAddress(true);
       }
     }
-  }, [isAuthenticated, fetchCart, router, userStorageKey, user?.id, user?.email, initUserCart]);
+  }, [userStorageKey, user?.id, user?.email, initUserCart, fetchCart]);
 
   const items = cart?.items || [];
 
@@ -120,6 +117,13 @@ export default function CartPage() {
 
   const handleOpenBooking = () => {
     if (selectedItems.length === 0) return;
+
+    // Guest checkout guard: redirect to login with callback to return to cart
+    if (!isAuthenticated) {
+      router.push('/login?redirect=/cart');
+      return;
+    }
+
     if (savedAddress) {
       setUseNewAddress(false);
     } else {
@@ -135,17 +139,17 @@ export default function CartPage() {
 
     let finalAddress = '';
     if (useNewAddress || !savedAddress) {
-      finalAddress = `${address.trim()}, ${city.trim()} - ${pincode.trim()} (Phone: ${phone.trim()})`;
+      finalAddress = address.trim() + ', ' + city.trim() + ' - ' + pincode.trim() + ' (Phone: ' + phone.trim() + ')';
       const toSave: SavedAddress = { address, city, pincode, phone };
       setSavedAddress(toSave);
       if (typeof window !== 'undefined' && userStorageKey) {
         localStorage.setItem(userStorageKey, JSON.stringify(toSave));
       }
     } else {
-      finalAddress = `${savedAddress.address}, ${savedAddress.city} - ${savedAddress.pincode} (Phone: ${savedAddress.phone})`;
+      finalAddress = savedAddress.address + ', ' + savedAddress.city + ' - ' + savedAddress.pincode + ' (Phone: ' + savedAddress.phone + ')';
     }
 
-    const titles = selectedItems.map((i) => `${i.product?.title || 'Item'} (x${i.quantity})`).join(', ');
+    const titles = selectedItems.map((i) => (i.product?.title || 'Item') + ' (x' + i.quantity + ')').join(', ');
     const bookedIds = selectedItems.map((i) => i.id);
 
     try {
@@ -164,7 +168,7 @@ export default function CartPage() {
       }
     } catch (err: any) {
       const msg = err.response?.data?.message || err.message || 'Failed to place order';
-      alert(`Booking Error: ${msg}`);
+      alert('Booking Error: ' + msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -255,9 +259,10 @@ export default function CartPage() {
               return (
                 <div
                   key={item.id}
-                  className={`flex items-center justify-between rounded-xl border p-4 shadow-sm transition ${
-                    isSelected ? 'border-blue-300 bg-white' : 'border-slate-200 bg-slate-50/60 opacity-75'
-                  }`}
+                  className={
+                    'flex items-center justify-between rounded-xl border p-4 shadow-sm transition ' +
+                    (isSelected ? 'border-blue-300 bg-white' : 'border-slate-200 bg-slate-50/60 opacity-75')
+                  }
                 >
                   <div className="flex items-center gap-3.5">
                     <button
@@ -369,18 +374,28 @@ export default function CartPage() {
             <button
               onClick={handleOpenBooking}
               disabled={selectedItems.length === 0}
-              className={`flex w-full items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold text-white shadow transition ${
-                selectedItems.length === 0
+              className={
+                'flex w-full items-center justify-center gap-2 rounded-lg py-3 text-sm font-bold text-white shadow transition ' +
+                (selectedItems.length === 0
                   ? 'cursor-not-allowed bg-slate-300 text-slate-500'
-                  : 'bg-[#fb641b] hover:bg-[#e85a15]'
-              }`}
+                  : 'bg-[#fb641b] hover:bg-[#e85a15]')
+              }
             >
-              <Zap className="h-4 w-4 fill-current" />
-              <span>
-                {selectedItems.length === 0
-                  ? 'Select Items to Book'
-                  : `Book Selected Items (${selectedItems.length})`}
-              </span>
+              {!isAuthenticated ? (
+                <>
+                  <LogIn className="h-4 w-4" />
+                  <span>Sign In to Book Selected Items ({selectedItems.length})</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4 fill-current" />
+                  <span>
+                    {selectedItems.length === 0
+                      ? 'Select Items to Book'
+                      : 'Book Selected Items (' + selectedItems.length + ')'}
+                  </span>
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -404,7 +419,7 @@ export default function CartPage() {
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Select Delivery Address</h3>
                 <p className="text-xs text-slate-500">
-                  Booking {selectedItems.length} selected item(s) • 5 to 7 days delivery
+                  Booking {selectedItems.length} selected item(s) - 5 to 7 days delivery
                 </p>
               </div>
             </div>
@@ -465,7 +480,7 @@ export default function CartPage() {
                       onClick={() => setUseNewAddress(false)}
                       className="text-xs font-semibold text-blue-600 hover:text-blue-700"
                     >
-                      ← Back to saved address
+                      Back to saved address
                     </button>
                   </div>
                 )}

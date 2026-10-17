@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState } from 'react';
 import Link from 'next/link';
@@ -23,7 +23,7 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     try {
       const res = await api.post('/auth/forgot-password', { email });
-      setSuccessMessage(res.data.message || 'Verification code sent to your email.');
+      setSuccessMessage(res.data?.message || 'Verification code sent to your email.');
       setStep('reset');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to send reset code. Please try again.');
@@ -37,12 +37,12 @@ export default function ForgotPasswordPage() {
     setError(null);
     setLoading(true);
     try {
-      await api.post('/auth/reset-password', {
+      const res = await api.post('/auth/reset-password', {
         email,
         otp,
         newPassword,
       });
-      setSuccessMessage('Password reset successfully! Redirecting to login...');
+      setSuccessMessage(res.data?.message || 'Password reset successfully! Redirecting to login...');
       setTimeout(() => {
         router.push('/login');
       }, 1500);

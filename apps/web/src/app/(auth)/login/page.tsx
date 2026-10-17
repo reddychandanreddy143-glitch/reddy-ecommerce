@@ -1,13 +1,16 @@
-'use client';
+﻿'use client';
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '../../../stores/auth.store';
 import { Package, Loader2, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectUrl = searchParams.get('redirect') || '/shop';
+
   const { login, isLoading } = useAuthStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,7 +22,7 @@ export default function LoginPage() {
     setError(null);
     try {
       await login({ email, password });
-      router.push('/shop');
+      router.push(redirectUrl);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Invalid credentials. Please try again.');
     }
@@ -35,7 +38,7 @@ export default function LoginPage() {
           <h2 className="mt-4 text-2xl font-bold tracking-tight text-slate-900">Sign in to your account</h2>
           <p className="mt-1 text-xs text-slate-500">
             Or{' '}
-            <Link href="/register" className="font-semibold text-indigo-600 hover:text-indigo-500">
+            <Link href={`/register${redirectUrl !== '/shop' ? `?redirect=${encodeURIComponent(redirectUrl)}` : ''}`} className="font-semibold text-indigo-600 hover:text-indigo-500">
               create a new account
             </Link>
           </p>

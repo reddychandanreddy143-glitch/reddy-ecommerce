@@ -1,11 +1,9 @@
-'use client';
+﻿'use client';
 
 import React, { useState } from 'react';
 import { ShoppingCart, Check, Star, Heart } from 'lucide-react';
 import { useCartStore } from '../../stores/cart.store';
-import { useAuthStore } from '../../stores/auth.store';
 import { useWishlistStore } from '../../stores/wishlist.store';
-import { useRouter } from 'next/navigation';
 
 export interface Product {
   id: string;
@@ -49,9 +47,7 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product, onSelect }: ProductCardProps) {
-  const router = useRouter();
   const { addItem, isLoading } = useCartStore();
-  const { isAuthenticated } = useAuthStore();
   const { toggleWishlist, isInWishlist } = useWishlistStore();
   const [added, setAdded] = useState(false);
 
@@ -60,10 +56,6 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
 
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!isAuthenticated) {
-      router.push('/login');
-      return;
-    }
     await addItem({
       id: product.id,
       title: product.title,
@@ -76,10 +68,6 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
 
   const handleToggleWishlist = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!isAuthenticated) {
-      router.push('/login');
-      return;
-    }
     toggleWishlist({
       id: product.id,
       title: product.title,
