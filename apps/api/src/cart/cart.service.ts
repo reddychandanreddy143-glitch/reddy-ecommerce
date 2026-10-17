@@ -25,6 +25,13 @@ export class CartService {
     if (!cart) {
       cart = this.cartRepo.create({ userId, items: [] });
       cart = await this.cartRepo.save(cart);
+    } else if (cart.items && cart.items.length > 0) {
+      // Automatically clean up any corrupted or orphaned cart items from the database
+      const invalidItems = cart.items.filter((item) => !item.product || !item.product.title);
+      if (invalidItems.length > 0) {
+        await this.cartItemRepo.remove(invalidItems);
+        cart.items = cart.items.filter((item) => item.product && item.product.title);
+      }
     }
 
     return cart;

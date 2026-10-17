@@ -49,8 +49,8 @@ const loadLocalCart = (userId?: string | null): Cart => {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed?.items)) {
-        // Filter out malformed/corrupted items (e.g. items with missing or invalid title)
-        parsed.items = parsed.items.filter((item: any) => item?.productId && item?.product?.title);
+        // Strip out corrupt items (0 price with no title or missing id)
+        parsed.items = parsed.items.filter((item: any) => item && (item.productId || item.id) && item.product?.title);
         return parsed;
       }
     }
@@ -81,80 +81,93 @@ export const useCartStore = create<CartState>((set, get) => ({
   },
 
   fetchCart: async () => {
-    const { currentUserId } = get();
+    const { currentUserId, cart: localCart } = get();
     try {
       const res = await api.get('/cart');
-      const serverItems: any[] = res.data?.items || [];
+      const rawServerItems: any[] = res.data?.items || [];
       
-      const cleanItems: CartItem[] = serverItems
-        .filter((sItem) => sItem && (sItem.productId || sItem.id))
+      // Filter out invalid items (like price 0 and no title)
+      const validServerItems: CartItem[] = rawServerItems
+        .filter((sItem) => sItem && sItem.product && sItem.product.title && sItem.product.title.trim() !== '')
         .map((sItem) => ({
           id: sItem.id || `server-${sItem.productId}`,
           productId: sItem.productId || sItem.product?.id,
           quantity: sItem.quantity || 1,
           product: {
             id: sItem.product?.id || sItem.productId,
-            title: sItem.product?.title || 'Product',
+            title: sItem.product?.title,
             price: sItem.product?.price ?? 0,
             imageUrl: sItem.product?.imageUrl || sItem.product?.images?.[0] || '',
           },
         }));
 
-      const updatedCart: Cart = {
-        id: res.data?.id || get().cart?.id || `cart-${currentUserId || 'guest'}`,
-        userId: currentUserId || undefined,
-        items: cleanItems,
-      };
-
-      set({ cart: updatedCart });
-      saveLocalCart(currentUserId, updatedCart);
-    } catch {
-      // Fallback to local cart if network fails
-    }
-  },
-
-  addItem: async (product, quantity = 1) => {
-    set({ isLoading: true });
-    try {
-      const { currentUserId } = get();
-      const currentItems = get().cart?.items ? [...get().cart!.items] : [];
-      const existingIndex = currentItems.findIndex((i) => i.productId === product.id);
-
-      if (existingIndex > -1) {
-        currentItems[existingIndex].quantity += quantity;
-      } else {
-        currentItems.push({
-          id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          productId: product.id,
-          quantity,
-          product: {
-            id: product.id,
-            title: product.title,
-            price: product.price,
-            imageUrl: product.imageUrl,
-          },
-        });
-      }
+      // Merge server items with current local items so locally added items are never lost
+      const currentItems = [...(localCart?.items || [])];
+      
+      validServerItems.forEach((srv) => {
+        const idx = currentItems.findIndex(
+          (ci) => ci.productId === srv.productId || ci.id === srv.id
+        );
+        if (idx === -1) {
+          currentItems.push(srv);
+        }
+      });
 
       const updatedCart: Cart = {
-        id: get().cart?.id || `cart-${currentUserId || 'guest'}`,
+        id: res.data?.id || localCart?.id || `cart-${currentUserId || 'guest'}`,
         userId: currentUserId || undefined,
         items: currentItems,
       };
 
       set({ cart: updatedCart });
       saveLocalCart(currentUserId, updatedCart);
+    } catch {
+      // Keep local cart if network or auth fails
+    }
+  },
 
-      api.post('/cart/items', { productId: product.id, quantity }).catch(() => {});
-    } finally {
-      set({ isLoading: false });
+  addItem: async (product, quantity = 1) => {
+    const { currentUserId, cart } = get();
+    const currentItems = cart?.items ? [...cart.items] : [];
+    const existingIndex = currentItems.findIndex((i) => i.productId === product.id);
+
+    if (existingIndex > -1) {
+      currentItems[existingIndex].quantity += quantity;
+    } else {
+      currentItems.push({
+        id: `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        productId: product.id,
+        quantity,
+        product: {
+          id: product.id,
+          title: product.title,
+          price: product.price,
+          imageUrl: product.imageUrl,
+        },
+      });
+    }
+
+    const updatedCart: Cart = {
+      id: cart?.id || `cart-${currentUserId || 'guest'}`,
+      userId: currentUserId || undefined,
+      items: currentItems,
+    };
+
+    set({ cart: updatedCart });
+    saveLocalCart(currentUserId, updatedCart);
+
+    try {
+      await api.post('/cart/items', { productId: product.id, quantity });
+    } catch (e) {
+      // Local cart retains it even if guest or delayed backend
     }
   },
 
   updateQuantity: async (itemId: string, quantity: number) => {
-    const { currentUserId } = get();
-    const currentItems = get().cart?.items ? [...get().cart!.items] : [];
+    const { currentUserId, cart } = get();
+    const currentItems = cart?.items ? [...cart.items] : [];
     const index = currentItems.findIndex((i) => i.id === itemId);
+
     if (index > -1) {
       if (quantity <= 0) {
         currentItems.splice(index, 1);
@@ -163,8 +176,9 @@ export const useCartStore = create<CartState>((set, get) => ({
         currentItems[index].quantity = quantity;
         api.patch(`/cart/items/${itemId}`, { quantity }).catch(() => {});
       }
+
       const updatedCart: Cart = {
-        id: get().cart?.id || `cart-${currentUserId || 'guest'}`,
+        id: cart?.id || `cart-${currentUserId || 'guest'}`,
         userId: currentUserId || undefined,
         items: currentItems,
       };
@@ -174,10 +188,10 @@ export const useCartStore = create<CartState>((set, get) => ({
   },
 
   removeItem: async (itemId: string) => {
-    const { currentUserId } = get();
-    const currentItems = (get().cart?.items || []).filter((i) => i.id !== itemId);
+    const { currentUserId, cart } = get();
+    const currentItems = (cart?.items || []).filter((i) => i.id !== itemId);
     const updatedCart: Cart = {
-      id: get().cart?.id || `cart-${currentUserId || 'guest'}`,
+      id: cart?.id || `cart-${currentUserId || 'guest'}`,
       userId: currentUserId || undefined,
       items: currentItems,
     };
@@ -188,11 +202,11 @@ export const useCartStore = create<CartState>((set, get) => ({
   },
 
   removeMultipleItems: async (itemIds: string[]) => {
-    const { currentUserId } = get();
+    const { currentUserId, cart } = get();
     const idSet = new Set(itemIds);
-    const currentItems = (get().cart?.items || []).filter((i) => !idSet.has(i.id));
+    const currentItems = (cart?.items || []).filter((i) => !idSet.has(i.id));
     const updatedCart: Cart = {
-      id: get().cart?.id || `cart-${currentUserId || 'guest'}`,
+      id: cart?.id || `cart-${currentUserId || 'guest'}`,
       userId: currentUserId || undefined,
       items: currentItems,
     };
