@@ -31,8 +31,8 @@ interface CartState {
   addItem: (product: { id: string; title: string; price: number | string; imageUrl?: string }, quantity?: number) => Promise<void>;
   updateQuantity: (itemId: string, quantity: number) => Promise<void>;
   removeItem: (itemId: string) => Promise<void>;
-  removeMultipleItems: (itemIds: string[]) => void;
-  clearCart: () => void;
+  removeMultipleItems: (itemIds: string[]) => Promise<void>;
+  clearCart: () => Promise<void>;
   getItemCount: () => number;
   getSubtotal: () => number;
 }
@@ -46,7 +46,14 @@ const loadLocalCart = (userId?: string | null): Cart => {
   const key = getStorageKey(userId);
   try {
     const raw = localStorage.getItem(key);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.items)) {
+        // Filter out malformed/corrupted items (e.g. items with missing or invalid title)
+        parsed.items = parsed.items.filter((item: any) => item?.productId && item?.product?.title);
+        return parsed;
+      }
+    }
   } catch {}
   return { id: `cart-${userId || 'guest'}`, items: [] };
 };
@@ -78,41 +85,31 @@ export const useCartStore = create<CartState>((set, get) => ({
     try {
       const res = await api.get('/cart');
       const serverItems: any[] = res.data?.items || [];
-      if (serverItems.length > 0) {
-        const currentItems = get().cart?.items ? [...get().cart!.items] : [];
+      
+      const cleanItems: CartItem[] = serverItems
+        .filter((sItem) => sItem && (sItem.productId || sItem.id))
+        .map((sItem) => ({
+          id: sItem.id || `server-${sItem.productId}`,
+          productId: sItem.productId || sItem.product?.id,
+          quantity: sItem.quantity || 1,
+          product: {
+            id: sItem.product?.id || sItem.productId,
+            title: sItem.product?.title || 'Product',
+            price: sItem.product?.price ?? 0,
+            imageUrl: sItem.product?.imageUrl || sItem.product?.images?.[0] || '',
+          },
+        }));
 
-        serverItems.forEach((sItem) => {
-          const existingIdx = currentItems.findIndex(
-            (ci) => ci.productId === sItem.productId || ci.id === sItem.id
-          );
-          if (existingIdx > -1) {
-            currentItems[existingIdx].quantity = sItem.quantity;
-          } else {
-            currentItems.push({
-              id: sItem.id || `server-${sItem.productId}`,
-              productId: sItem.productId,
-              quantity: sItem.quantity,
-              product: {
-                id: sItem.product?.id || sItem.productId,
-                title: sItem.product?.title || 'Product',
-                price: sItem.product?.price || 0,
-                imageUrl: sItem.product?.imageUrl || sItem.product?.images?.[0],
-              },
-            });
-          }
-        });
+      const updatedCart: Cart = {
+        id: res.data?.id || get().cart?.id || `cart-${currentUserId || 'guest'}`,
+        userId: currentUserId || undefined,
+        items: cleanItems,
+      };
 
-        const updatedCart: Cart = {
-          id: res.data.id || get().cart?.id || `cart-${currentUserId || 'guest'}`,
-          userId: currentUserId || undefined,
-          items: currentItems,
-        };
-
-        set({ cart: updatedCart });
-        saveLocalCart(currentUserId, updatedCart);
-      }
+      set({ cart: updatedCart });
+      saveLocalCart(currentUserId, updatedCart);
     } catch {
-      // Offline fallback: keep local cart intact
+      // Fallback to local cart if network fails
     }
   },
 
@@ -148,7 +145,6 @@ export const useCartStore = create<CartState>((set, get) => ({
       set({ cart: updatedCart });
       saveLocalCart(currentUserId, updatedCart);
 
-      // Async backend sync
       api.post('/cart/items', { productId: product.id, quantity }).catch(() => {});
     } finally {
       set({ isLoading: false });
@@ -162,8 +158,10 @@ export const useCartStore = create<CartState>((set, get) => ({
     if (index > -1) {
       if (quantity <= 0) {
         currentItems.splice(index, 1);
+        api.delete(`/cart/items/${itemId}`).catch(() => {});
       } else {
         currentItems[index].quantity = quantity;
+        api.patch(`/cart/items/${itemId}`, { quantity }).catch(() => {});
       }
       const updatedCart: Cart = {
         id: get().cart?.id || `cart-${currentUserId || 'guest'}`,
@@ -177,50 +175,60 @@ export const useCartStore = create<CartState>((set, get) => ({
 
   removeItem: async (itemId: string) => {
     const { currentUserId } = get();
-    const currentItems = get().cart?.items ? [...get().cart!.items] : [];
-    const filtered = currentItems.filter((i) => i.id !== itemId);
+    const currentItems = (get().cart?.items || []).filter((i) => i.id !== itemId);
     const updatedCart: Cart = {
       id: get().cart?.id || `cart-${currentUserId || 'guest'}`,
       userId: currentUserId || undefined,
-      items: filtered,
+      items: currentItems,
     };
     set({ cart: updatedCart });
     saveLocalCart(currentUserId, updatedCart);
+
     api.delete(`/cart/items/${itemId}`).catch(() => {});
   },
 
-  removeMultipleItems: (itemIds: string[]) => {
+  removeMultipleItems: async (itemIds: string[]) => {
     const { currentUserId } = get();
-    const currentItems = get().cart?.items ? [...get().cart!.items] : [];
-    const filtered = currentItems.filter((i) => !itemIds.includes(i.id));
+    const idSet = new Set(itemIds);
+    const currentItems = (get().cart?.items || []).filter((i) => !idSet.has(i.id));
     const updatedCart: Cart = {
       id: get().cart?.id || `cart-${currentUserId || 'guest'}`,
       userId: currentUserId || undefined,
-      items: filtered,
+      items: currentItems,
     };
     set({ cart: updatedCart });
     saveLocalCart(currentUserId, updatedCart);
-    itemIds.forEach((id) => api.delete(`/cart/items/${id}`).catch(() => {}));
+
+    itemIds.forEach((id) => {
+      api.delete(`/cart/items/${id}`).catch(() => {});
+    });
   },
 
-  clearCart: () => {
+  clearCart: async () => {
     const { currentUserId } = get();
-    const emptyCart: Cart = { id: `cart-${currentUserId || 'guest'}`, items: [] };
+    const emptyCart: Cart = {
+      id: `cart-${currentUserId || 'guest'}`,
+      userId: currentUserId || undefined,
+      items: [],
+    };
     set({ cart: emptyCart });
     saveLocalCart(currentUserId, emptyCart);
+
     api.delete('/cart').catch(() => {});
   },
 
   getItemCount: () => {
     const items = get().cart?.items || [];
-    return items.reduce((acc, item) => acc + item.quantity, 0);
+    return items.reduce((acc, item) => acc + (item.quantity || 1), 0);
   },
 
   getSubtotal: () => {
     const items = get().cart?.items || [];
     return items.reduce((acc, item) => {
-      const price = Number(item.product?.price || 0);
-      return acc + price * item.quantity;
+      const price = typeof item.product?.price === 'number'
+        ? item.product.price
+        : parseFloat(String(item.product?.price || 0)) || 0;
+      return acc + price * (item.quantity || 1);
     }, 0);
   },
 }));
