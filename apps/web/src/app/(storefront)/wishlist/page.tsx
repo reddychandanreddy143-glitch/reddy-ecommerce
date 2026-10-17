@@ -12,7 +12,6 @@ import {
   Trash2,
   ArrowRight,
   ShoppingBag,
-  Sparkles,
 } from 'lucide-react';
 
 export default function WishlistPage() {
@@ -30,7 +29,15 @@ export default function WishlistPage() {
   }, [isAuthenticated, user?.id, user?.email, router, initUserWishlist]);
 
   const handleMoveToCart = async (product: WishlistItem) => {
-    await addItem(product.id, 1);
+    await addItem(
+      {
+        id: product.id,
+        title: product.title,
+        price: product.price,
+        imageUrl: product.imageUrl,
+      },
+      1
+    );
     removeItem(product.id);
   };
 
