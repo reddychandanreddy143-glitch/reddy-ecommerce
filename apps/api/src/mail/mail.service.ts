@@ -1,4 +1,4 @@
-﻿import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 
 export interface OrderEmailDetails {
@@ -24,14 +24,18 @@ export class MailService {
   private transporter: nodemailer.Transporter;
 
   constructor() {
+    const port = Number(process.env.MAIL_PORT) || 465;
     this.transporter = nodemailer.createTransport({
       host: process.env.MAIL_HOST || 'smtp.gmail.com',
-      port: Number(process.env.MAIL_PORT) || 587,
-      secure: false,
+      port: port,
+      secure: port === 465,
       auth: {
         user: process.env.MAIL_USER || 'reddychandanreddy143@gmail.com',
         pass: process.env.MAIL_PASS || 'airpffnobdkladhx',
       },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
     });
   }
 
